@@ -1,4 +1,4 @@
-from experiment import SNNExperiment
+from Experiment import SNNExperiment
 
 config = {
     'dataset': 'MNIST',

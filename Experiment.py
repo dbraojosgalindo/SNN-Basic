@@ -1,9 +1,9 @@
 import torch
-from datasets import MNISTDataset
-from encoding import RateEncoder
-from decoding import RateDecoder
-from architecture import TwoLayerSNN
-from trainer import Trainer
+from Datasets import MNISTDataset
+from Encoding import RateEncoder
+from Decoding import RateDecoder
+from Architecture import TwoLayerSNN
+from Trainer import Trainer
 import torch.nn as nn
 
 
