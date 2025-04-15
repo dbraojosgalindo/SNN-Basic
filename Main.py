@@ -5,7 +5,7 @@ config = {
     'encoder': 'rate',
     'decoder': 'rate',
     'architecture': 'TwoLayerSNN',
-    'data_path': '/tmp/data/mnist',
+    'data_path': './data/mnist',
     'batch_size': 128,
     'num_inputs': 784,
     'num_hidden': 1000,
@@ -18,5 +18,7 @@ config = {
     'eval_freq': 1
 }
 
-experiment = SNNExperiment(config)
-final_accuracy = experiment.run()
+if __name__ == "__main__":
+    experiment = SNNExperiment(config)
+    final_accuracy = experiment.run()
+    print(f"\n✅ Final test accuracy: {final_accuracy:.2f}%")
