@@ -1,6 +1,6 @@
 import torch
 from Datasets import MNISTDataset
-from Encoding import RateEncoder, TtfsEncoder
+from Encoding import RateEncoder, TtfsEncoder, DirectEncoder
 from Decoding import RateDecoder
 from Architecture import TwoLayerSNN
 from Trainer import Trainer
@@ -27,8 +27,10 @@ class SNNExperiment:
     def init_encoder(self):
         if self.config['encoder'] == "rate":
             return RateEncoder(self.config['num_steps'], self.config.get('gain', 0.5))
-        if self.config['encoder'] == "ttfs":
+        elif self.config['encoder'] == "ttfs":
             return TtfsEncoder(self.config['num_steps'])
+        elif self.config['encoder'] == "direct":
+            return DirectEncoder(self.config['num_steps'])
 
     def init_decoder(self):
         return RateDecoder()
