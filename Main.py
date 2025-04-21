@@ -1,3 +1,4 @@
+import torch
 from Experiment import SNNExperiment
 
 config = {
@@ -15,10 +16,17 @@ config = {
     'lr': 5e-4,
     'betas': (0.9, 0.999),
     'num_epochs': 1,
-    'eval_freq': 1
+    'eval_freq': 1,
+    'decoder_params': {
+        'rate': {'scale': 1.0},
+        'latency': {'target_time': 0.5, 'sensitivity': 1.0},
+        'first_spike': {'threshold': 0.1}}
 }
 
 if __name__ == "__main__":
     experiment = SNNExperiment(config)
     final_accuracy = experiment.run()
     print(f"\n✅ Final test accuracy: {final_accuracy:.2f}%")
+    print("\nDebug del decoder:")
+    print("Tipo:", config['decoder'])
+    print("Salida ejemplo:", experiment.decoder.decode(torch.rand(25, 1, 10)))

@@ -1,6 +1,6 @@
 import torch
 from Datasets import MNISTDataset
-from Encoding import RateEncoder, TtfsEncoder, DeltaEncoder, DirectEncoder, PoissonGen
+from Encoding import RateEncoder, TtfsEncoder, DirectEncoder, PoissonGen
 from Decoding import RateDecoder
 from Architecture import TwoLayerSNN
 from Trainer import Trainer
@@ -35,7 +35,20 @@ class SNNExperiment:
             return DirectEncoder(self.config['num_steps'])
 
     def init_decoder(self):
-        return RateDecoder()
+        decoder_type = self.config['decoder']
+        params = self.config['decoder_params'].get(decoder_type, {})
+
+        if decoder_type == "rate":
+            from Decoding import RateDecoder
+            return RateDecoder(self.config['num_steps'], **params)
+        elif decoder_type == "latency":
+            from Decoding import LatencyDecoder
+            return LatencyDecoder(self.config['num_steps'], **params)
+        elif decoder_type == "first_spike":
+            from Decoding import FirstSpikeDecoder
+            return FirstSpikeDecoder(self.config['num_steps'], **params)
+        else:
+            raise ValueError(f"Decoder no soportado: {decoder_type}")
 
     def init_architecture(self):
         return TwoLayerSNN(
