@@ -4,7 +4,7 @@ import time
 
 config = {
     'dataset': 'MNIST',
-    'encoder': 'rate',
+    'encoder': 'rate', # posibles: poisson, rate, ttfs, direct, ttfs_time, delta
     'decoder': 'rate',
     'architecture': 'TwoLayerSNN',
     'data_path': './data/mnist',

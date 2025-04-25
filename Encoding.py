@@ -64,3 +64,21 @@ class PoissonGen(Encoder):  #Rate vs Direct paper
         mask = torch.le(rand_data * self.rescale_fac, torch.abs(data)).float()
         output = mask * torch.sign(data)
         return output
+
+
+    
+class DeltaEncoder(Encoder):
+    def __init__(self, num_steps, off_spike=True): # No se utiliza el num_steps
+        super().__init__(num_steps)
+        self.off_spike = off_spike
+        
+    def encode(self, data): 
+        #data.shape = torch.Size([128, 1, 28, 28])
+        deltas = []
+        for i in data:
+            delta = spikegen.delta(i[0], off_spike=self.off_spike).unsqueeze(0).unsqueeze(0) #Si se usa con imagenes en rgb hay que cambiar esto
+            deltas.append(delta)
+        solution = torch.cat(deltas, dim=0)
+        #Duplica la solucion x los num_steps
+        final = solution.unsqueeze(0).repeat(self.num_steps, 1, 1, 1, 1) # -> torch.Size([num_steps, 128, 1, 28, 28])
+        return final
