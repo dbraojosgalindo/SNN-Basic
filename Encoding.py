@@ -96,15 +96,33 @@ class MWEncoder(Encoder): # Moving window
 
     def encode(self, data) -> torch.Tensor:
         """
-        Versión optimizada de Moving Window encoding para batches de imágenes MNIST.
-        
-        Args:
-            data: Tensor de entrada con shape (batch_size, 1, 28, 28)
-            threshold: Umbral para determinar picos
-            window: Tamaño de la ventana (muestras anteriores a considerar)
-        
+        Codifica imágenes en secuencias de picos (+1/-1/0) usando moving window.
+                
+        Estrategia:
+            Compara cada píxel con la media de una ventana temporal anterior (t - window - 1 a t - 1),
+            generando picos cuando supera el umbral (±threshold respecto a la media).
+
+        Parameters:
+            data (torch.Tensor): Tensor de entrada en formato [batch, canales, alto, ancho]
+            threshold (float): Umbral para activación de picos (absoluto, mismo rango que los datos)
+            window (int): Tamaño de la ventana temporal histórica (en muestras/píxeles)
+
         Returns:
-            Tensor codificado con valores -1, 0, 1 y mismo shape que la entrada.
+            torch.Tensor: Tensor codificado con valores {-1, 0, +1}. Mismo formato que la entrada.
+
+        Algoritmo:
+            1. Transformación a 1D:
+                - Aplana las imágenes a vectores 1D (preserva batch y canales)
+            2. Sumas acumuladas vectorizadas:
+                - Calcula ventanas deslizantes mediante diferencias de sumas acumuladas
+                - Padding inicial para manejar bordes
+            3. Cálculo de medias:
+                - Divide las sumas por el tamaño de ventana efectivo
+                - Manejo especial para los primeros window+1 elementos (ventana inicial)
+            4. Umbralización:
+                - +1 si valor > media + threshold
+                - -1 si valor < media - threshold
+                - 0 en otro caso
         """
         batch_size, channels, height, width = data.shape
         data_flat = data.view(batch_size, -1)  # (batch_size, 784)
@@ -154,3 +172,67 @@ class MWEncoder(Encoder): # Moving window
         out[lower] = -1
         
         return out.view(batch_size, channels, height, width).unsqueeze(0).repeat(self.num_steps, 1, 1, 1, 1)
+    
+    
+
+class SFEncoder(Encoder):
+    
+    # Spiking Neural Networks: Background, Recent Development and the NeuCube Architecture. https://github.com/KEDRI-AUT/snn-encoder-tools
+    def __init__(self, num_steps = 25, threshold=0.1):
+        super().__init__(num_steps)
+        self.threshold = threshold
+    
+    def encode(self, data):
+        """
+        Algoritmo de codificación Step-Forward (SF) para Redes Neuronales de Picos (SNNs).
+    
+        Transforma intensidades de píxeles en trenes temporales de picos (+1/-1/0) mediante 
+        umbralización adaptativa. Compara cada píxel con una línea base dinámica, generando
+        picos cuando se supera el umbral definido, en un esquema similar a modulación delta.
+
+        Parameters:
+            data (torch.Tensor): Batch de imágenes de entrada. Formato: [batch, canales, alto, ancho]
+            
+        Returns:
+            torch.Tensor: Tensor de picos codificados. Formato: [num_steps, batch, canales, alto, ancho]
+            
+        Algoritmo:
+            1. Inicialización: 
+            - Establece línea base inicial (base) con el primer valor de píxel
+            2. Comparación por Umbral:
+            - Para cada píxel subsiguiente:
+                * Pico = +1 si píxel > base + umbral (escalón positivo)
+                * Pico = -1 si píxel < base - umbral (escalón negativo)
+                * Sin pico (0) si está en [base ± umbral]
+            3. Actualización de Base:
+            - Ajusta la base ±umbral tras cada pico
+        """
+        batch_size, channels, height, width = data.shape
+        images = data.view(batch_size, -1)  # [batch, 784]
+
+        # Pre-asigna tensores en GPU si está disponible
+        device = images.device
+        threshold = torch.tensor(self.threshold, device=device)
+        
+        outputs = torch.zeros_like(images)
+        bases = torch.zeros_like(images)
+        bases[:, 0] = images[:, 0]
+
+        # Vectorización del algoritmo SF para todo el batch
+        for t in range(1, images.size(1)):
+            current = images[:, t]
+            prev_base = bases[:, t-1]
+            
+            # Cálculo vectorizado de condiciones
+            up = (current > prev_base + threshold)
+            down = (current < prev_base - threshold)
+            
+            # Actualización vectorizada
+            outputs[:, t] = torch.where(up, 1.0, torch.where(down, -1.0, 0.0))
+            bases[:, t] = prev_base + outputs[:, t] * threshold #Actualiza la base
+
+        # Preparar salida para SNN (formato temporal)
+        encoded = outputs.view(batch_size, channels, height, width)
+        encoded = encoded.unsqueeze(0).expand(self.num_steps, -1, -1, -1, -1)
+        
+        return encoded

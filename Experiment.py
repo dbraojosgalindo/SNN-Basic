@@ -1,6 +1,6 @@
 import torch
 from Datasets import MNISTDataset
-from Encoding import RateEncoder, TtfsEncoder, DirectEncoder, PoissonGen, Ttfs_time_Encoder, DeltaEncoder, MWEncoder
+from Encoding import RateEncoder, TtfsEncoder, DirectEncoder, PoissonGen, Ttfs_time_Encoder, DeltaEncoder, MWEncoder, SFEncoder
 from Decoding import RateDecoder, FirstSpikeDecoder, LatencyDecoder
 from Architecture import TwoLayerSNN
 from Trainer import Trainer
@@ -37,6 +37,8 @@ class SNNExperiment:
             return DeltaEncoder(self.config['num_steps'], off_spike=False)
        elif self.config['encoder'] == "MW":
             return MWEncoder(self.config['num_steps'])
+       elif self.config['encoder'] == "SF":
+            return SFEncoder(self.config['num_steps'])
        else:
            raise ValueError(f"Coder no soportado")
 
