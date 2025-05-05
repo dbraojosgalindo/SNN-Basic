@@ -1,11 +1,10 @@
-import torch
-from Experiment import SNNExperiment
 import time
+from Experiment import SNNExperiment
 
 config = {
     'dataset': 'MNIST',
     'encoder': 'SF', # posibles: poisson, rate, ttfs, direct, ttfs_time, delta, MW, SF
-    'decoder': 'rate', # posibles: , rate, latency, first_spike
+    'decoder': 'rank_order', # posibles: rate, latency, first_spike, population,rank_order
     'architecture': 'TwoLayerSNN',
     'data_path': './data/mnist',
     'batch_size': 128,
@@ -21,16 +20,15 @@ config = {
     'decoder_params': {
         'rate': {'scale': 1.0},
         'latency': {'target_time': 0.5, 'sensitivity': 1.0},
-        'first_spike': {'threshold': 0.1}}
-}
+        'first_spike': {'threshold': 0.1},
+        'population': {'num_classes': 10,'num_neurons_per_class': 1},
+        'rank_order': {'num_classes': 10}
+    }}
 
 if __name__ == "__main__":
     start_time = time.time()
     experiment = SNNExperiment(config)
     final_accuracy = experiment.run()
     print(f"\n Final test accuracy: {final_accuracy:.2f}%")
-    #print("\nDebug del decoder:") # Testeo Decodificador
-    #print("Tipo:", config['decoder'])
-    #print("Salida ejemplo:", experiment.decoder.decode(torch.rand(25, 1, 10)))
     end_time = time.time()
     print(f"Tiempo de ejecución: {end_time - start_time:.4f} segundos")

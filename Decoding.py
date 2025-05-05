@@ -20,9 +20,6 @@ class RateDecoder(Decoder):
    def decode(self, spk_rec):
        return spk_rec.sum(dim=0) * self.scale
 
-
-
-
 class LatencyDecoder(Decoder):
    def __init__(self, num_steps, target_time=0.5, sensitivity=1.0):
        super().__init__(num_steps)
@@ -35,8 +32,6 @@ class LatencyDecoder(Decoder):
        normalized_times = spike_times / (self.num_steps - 1)
        time_diff = torch.abs(normalized_times - self.target_time)
        scores = torch.exp(-self.sensitivity * time_diff)
-
-
        return scores
 
 

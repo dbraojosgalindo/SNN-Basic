@@ -1,7 +1,7 @@
 import torch
 from Datasets import MNISTDataset
 from Encoding import RateEncoder, TtfsEncoder, DirectEncoder, PoissonGen, Ttfs_time_Encoder, DeltaEncoder, MWEncoder, SFEncoder
-from Decoding import RateDecoder, FirstSpikeDecoder, LatencyDecoder
+from Decoding import RateDecoder, FirstSpikeDecoder, LatencyDecoder, PopulationRateDecoder, RankOrderDecoder
 from Architecture import TwoLayerSNN
 from Trainer import Trainer
 import torch.nn as nn
@@ -11,7 +11,6 @@ class SNNExperiment:
    def __init__(self, config):
        self.config = config
        self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-
        self.dataset = self.init_dataset()
        self.encoder = self.init_encoder()
        self.decoder = self.init_decoder()
