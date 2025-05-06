@@ -30,6 +30,8 @@ class SNNExperiment:
            return PoissonGen(self.config['num_steps'])
        elif self.config['encoder'] == "ttfs":
            return TtfsEncoder(self.config['num_steps'])
+       elif self.config['encoder'] == "ttfs_time":
+            return Ttfs_time_Encoder(self.config['num_steps'])
        elif self.config['encoder'] == "direct":
            return DirectEncoder(self.config['num_steps'])
        elif self.config['encoder'] == "delta":
