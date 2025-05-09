@@ -1,3 +1,9 @@
+import os
+
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
 import torch
 from Datasets import MNISTDataset
 from Encoding import RateEncoder, TtfsEncoder, DirectEncoder, PoissonGen, Ttfs_time_Encoder, DeltaEncoder, MWEncoder, SFEncoder
@@ -52,7 +58,7 @@ class SNNExperiment:
            return LatencyDecoder(self.config['num_steps'], **params)
        elif decoder_type == "first_spike":
            return FirstSpikeDecoder(self.config['num_steps'], **params)
-       elif decoder_type == "population":
+       elif decoder_type == "population_rate":
            return PopulationRateDecoder(self.config['num_steps'], **params)
        elif decoder_type == "rank_order":
            return RankOrderDecoder(self.config['num_steps'], **params)
