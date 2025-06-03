@@ -5,13 +5,13 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from Experiment import SNNExperiment
 from Decoding import AllDecoders
 
-num_steps = [10, 25, 50, 100, 200]
+num_steps = [5, 10, 25, 50, 100, 200]
 decoders = ['all']
 
 # Config base (fuera del proceso paralelo para seguridad)
 config_base = {
     'dataset': 'MNIST',
-    'encoder': 'ttfs',
+    'encoder': 'rate',
     'decoder': '',
     'architecture': 'TwoLayerSNN',
     'data_path': './data/mnist',
@@ -59,7 +59,7 @@ if __name__ == "__main__":
     start_time = time.time()
     all_futures = []
 
-    with ProcessPoolExecutor(max_workers=14) as executor:
+    with ProcessPoolExecutor(max_workers=10) as executor:
         for decoder in decoders:
             for num_step in num_steps:
                 for trial in range(1, 6):
