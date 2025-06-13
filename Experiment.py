@@ -6,7 +6,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 import torch
 from Datasets import MNISTDataset
-from Encoding import RateEncoder, TtfsEncoder, DirectEncoder, PoissonGen, Ttfs_time_Encoder, DeltaEncoder, MWEncoder, SFEncoder
+from Encoding import *
 from Decoding import RateDecoder, FirstSpikeDecoder, LatencyDecoder, PopulationRateDecoder, RankOrderDecoder, AllDecoders
 from Architecture import TwoLayerSNN
 from Trainer import Trainer
@@ -36,8 +36,6 @@ class SNNExperiment:
            return PoissonGen(self.config['num_steps'])
        elif self.config['encoder'] == "ttfs":
            return TtfsEncoder(self.config['num_steps'])
-       elif self.config['encoder'] == "ttfs_time":
-            return Ttfs_time_Encoder(self.config['num_steps'])
        elif self.config['encoder'] == "direct":
            return DirectEncoder(self.config['num_steps'])
        elif self.config['encoder'] == "delta":
