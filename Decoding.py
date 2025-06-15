@@ -1,3 +1,6 @@
+# Decoding.py
+# Define las clases de decodificadores para convertir la salida de spikes en predicciones.
+
 import os
 
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -104,6 +107,9 @@ class AllDecoders(Decoder):
         return outputs
     
     def get_nombre(i):
+        """
+        Devuelve el nombre del decodificador según el índice.
+        """
         if i == 0:
             return "rate"
         if i == 1:
