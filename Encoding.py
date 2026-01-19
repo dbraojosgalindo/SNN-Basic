@@ -8,7 +8,10 @@ import snntorch.spikegen as spikegen
 import torch
 import torch.nn.functional as F
 
-class Encoder: #Clase padre de todas los encoders
+class Encoder: 
+    """
+    Clase padre de todas los encoders
+    """
     def __init__(self, num_steps):
         self.num_steps = num_steps
 
@@ -17,46 +20,77 @@ class Encoder: #Clase padre de todas los encoders
 
 
 class RateEncoder(Encoder):
+    """
+    Codifica los datos siguiendo una distribución de Bernoulli. Funciona igual que el PoissonEncoder.
+    
+    Args:
+        gain: Escala la probabilidad de generacion de spikes
+    """
     def __init__(self, num_steps, gain = 0.5):
         super().__init__(num_steps)
-        self.gain = gain # reduce el % de frecuencia en ese gain %.
+        self.gain = gain # reduce la frecuencia de spikes en ese gain %. 
+        #Si un valor es 1 y el gain es 0.5 en vez de un 100% de spike tiene un 50%.
+        print(self.gain)
         
     def encode(self, data):
         return spikegen.rate(data, num_steps=self.num_steps, gain=self.gain)
 
 
 class TtfsEncoder(Encoder):
+    """
+    Codifica la data en el tiempo segun la intensidad del pixel.
+    
+    Args:
+        rescale_fac: es como el gain pero inverso. Gain = 0.5 -> rescale = 2.0
+    """
     def __init__(self, num_steps, normalize=True, linear=False):
         super().__init__(num_steps)
         self.normalize = normalize # Distribuye los spikes en los num_steps
-        self.linear = linear # Para el ecuacion de logaritmo interna
+        self.linear = linear 
         
     def encode(self, data):
         return spikegen.latency(data, num_steps=self.num_steps, clip = True, normalize=self.normalize, linear=self.linear)
     
     
 class DirectEncoder(Encoder):
+    """
+    Sin codificacion ninguna
+    """
     def __init__(self, num_steps):
         super().__init__(num_steps)
         
     def encode(self, data):
+        # Se repiten num_steps veces la data
         return data.unsqueeze(0).repeat(self.num_steps, 1, 1, 1, 1) # -> torch.Size([num_steps, 128, 1, 28, 28])
     
-class PoissonGen(Encoder):  #Rate vs Direct paper
-    def __init__(self, num_steps, rescale_fac=2.0): #rescale es como el gain pero inverso. Gain = 0.5 -> rescale = 2.0
+class PoissonGen(Encoder):  #Rate vs Direct paper. No utiliza una distribucion de poisson, no se porque lo llaman asi en el paper
+    """
+    Genera spikes según una distribucion uniforme. Funciona igual que el RateEncoder.
+
+    Args:
+        rescale_fac (float): es como el gain pero inverso. Gain = 0.5 -> rescale = 2.0
+    """
+    def __init__(self, num_steps, rescale_fac=2.0): 
         super().__init__(num_steps)
         self.rescale_fac = rescale_fac
         
     def encode(self, data):
+        #Genera unos numeros aleatorios entre [0-1) con size de la [num_steps, data] con una distribucion uniforme
         rand_data = torch.rand((self.num_steps,) + data.shape, device=data.device)
 
-        # Crear máscara y multiplicar por el signo
+        # Se reescalan los valores random y se comparan con los de la data.
         output = torch.le(rand_data * self.rescale_fac, data).float()
         return output
 
 
     
 class DeltaEncoder(Encoder):
+    """
+    Detecta cambios en las filas de cada imagen
+
+    Args:
+        off_spike (bool): Generar spikes negativos
+    """
     def __init__(self, num_steps, off_spike=False, threshold=0.1): # No se utiliza el num_steps
         super().__init__(num_steps)
         self.off_spike = off_spike
@@ -85,6 +119,15 @@ class DeltaEncoder(Encoder):
 
 
 class MWEncoder(Encoder): # Moving window
+    """
+    Genera spikes usando una ventana movil. 
+    
+    Si la media del valor supera la media de la ventana anterior + un umbral se genera un spike
+
+    Args:
+        threshold (float): umbral para la activacion
+        window (int): tamaño de la ventana 
+    """
     # Spiking Neural Networks: Background, Recent Development and the NeuCube Architecture. https://github.com/KEDRI-AUT/snn-encoder-tools
     def __init__(self, num_steps, threshold=0.1, window = 5, off_spike=False):
         super().__init__(num_steps)
@@ -125,6 +168,14 @@ class MWEncoder(Encoder): # Moving window
     
 
 class SFEncoder(Encoder):
+    """
+        Transforma intensidades de píxeles en spikes mediante un umbral adaptativa. 
+        Compara cada píxel con una línea base dinámica + umbral absoluto, generando picos cuando se supera 
+        el umbral definido.
+    Args:
+        threshold (_type_): Umbral absoluto
+
+    """
     
     # Spiking Neural Networks: Background, Recent Development and the NeuCube Architecture. https://github.com/KEDRI-AUT/snn-encoder-tools
     def __init__(self, num_steps = 25, threshold=0.1, off_spike=False):

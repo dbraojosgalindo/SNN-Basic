@@ -1,3 +1,6 @@
+# Experiment.py
+# Define la clase SNNExperiment, que orquesta la ejecución de un experimento SNN completo.
+
 import os
 
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -15,7 +18,12 @@ import torch.nn as nn
 
 class SNNExperiment:
    def __init__(self, config):
+       """
+       Inicializa la SNN con la configuración dada.
+       Prepara dataset, encoder, decoder, arquitectura, red, optimizador y trainer.
+       """
        self.config = config
+       # Selecciona el dispositivo (GPU si está disponible, si no CPU)
        self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
        self.dataset = self.init_dataset()
        self.encoder = self.init_encoder()
@@ -74,6 +82,12 @@ class SNNExperiment:
        )
 
    def run(self):
+       """
+       Ejecuta el ciclo de entrenamiento y evaluación del experimento.
+        - Entrena la red durante num_epochs epochs.
+        - Evalúa la red cada eval_freq epochs.
+        - Devuelve la precisión final obtenida por el decoder.
+       """
        train_loader, test_loader = self.dataset.get_loaders()
 
        for epoch in range(self.config['num_epochs']):
