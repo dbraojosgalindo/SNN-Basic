@@ -5,7 +5,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from Experiment import SNNExperiment
 from Decoding import AllDecoders
 
-num_steps = [5, 10, 25, 50, 100, 200]
+num_steps = [200, 100, 50, 25, 10, 5]
 decoders = ['all']
 
 # Config base (fuera del proceso paralelo para seguridad)

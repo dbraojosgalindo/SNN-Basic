@@ -6,6 +6,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 import snntorch.spikegen as spikegen
 import torch
+import torch.nn.functional as F
 
 class Encoder: #Clase padre de todas los encoders
     def __init__(self, num_steps):
@@ -25,7 +26,7 @@ class RateEncoder(Encoder):
 
 
 class TtfsEncoder(Encoder):
-    def __init__(self, num_steps, normalize=True, linear=True):
+    def __init__(self, num_steps, normalize=True, linear=False):
         super().__init__(num_steps)
         self.normalize = normalize # Distribuye los spikes en los num_steps
         self.linear = linear # Para el ecuacion de logaritmo interna
@@ -50,172 +51,121 @@ class PoissonGen(Encoder):  #Rate vs Direct paper
         rand_data = torch.rand((self.num_steps,) + data.shape, device=data.device)
 
         # Crear máscara y multiplicar por el signo
-        mask = torch.le(rand_data * self.rescale_fac, torch.abs(data)).float()
-        output = mask * torch.sign(data)
+        output = torch.le(rand_data * self.rescale_fac, data).float()
         return output
 
 
     
 class DeltaEncoder(Encoder):
-    def __init__(self, num_steps, off_spike=False): # No se utiliza el num_steps
+    def __init__(self, num_steps, off_spike=False, threshold=0.1): # No se utiliza el num_steps
         super().__init__(num_steps)
         self.off_spike = off_spike
-        
+        self.threshold = threshold
+
     def encode(self, data): 
         #data.shape = torch.Size([128, 1, 28, 28])
-        deltas = []
-        for i in data:
-            delta = spikegen.delta(i[0], off_spike=self.off_spike).unsqueeze(0).unsqueeze(0) #Si se usa con imagenes en rgb hay que cambiar esto
-            deltas.append(delta)
-        solution = torch.cat(deltas, dim=0)
-        #Duplica la solucion x los num_steps
-        final = solution.unsqueeze(0).repeat(self.num_steps, 1, 1, 1, 1) # -> torch.Size([num_steps, 128, 1, 28, 28])
-        return final
+        
+        # 1. Permutar para que el Tiempo sea la Altura (Height)
+        # La altura va a ser la dimensión temporal para el codificador Delta
+        # Transformamos [Batch, Channel, Height, Width] -> [Height, Batch, Channel, Width]
+        data_permuted = data.permute(2, 0, 1, 3)
+        
+        # 2. Aplicar Delta
+        # padding=True mantiene el tamaño original (rellena la primera fila)
+        spikes = spikegen.delta(data_permuted,
+                                threshold=self.threshold,
+                                padding=True,
+                                off_spike=self.off_spike)
+        
+        # 3. Recuperar dimensiones originales
+        spikes = spikes.permute(1, 2, 0, 3)
+        
+        # 4. Repetir temporalmente para la SNN
+        return spikes.unsqueeze(0).repeat(self.num_steps, 1, 1, 1, 1)
 
 
 class MWEncoder(Encoder): # Moving window
     # Spiking Neural Networks: Background, Recent Development and the NeuCube Architecture. https://github.com/KEDRI-AUT/snn-encoder-tools
-    def __init__(self, num_steps, threshold=0.1, window = 5):
+    def __init__(self, num_steps, threshold=0.1, window = 5, off_spike=False):
         super().__init__(num_steps)
         self.threshold = threshold
         self.window = window
+        self.off_spike = off_spike
 
     def encode(self, data) -> torch.Tensor:
         """
-        Codifica imágenes en secuencias de picos (+1/0) usando moving window.
-                
-        Estrategia:
-            Compara cada píxel con la media de una ventana temporal anterior (t - window - 1 a t - 1),
-            generando picos cuando supera el umbral (±threshold respecto a la media).
-
-        Parameters:
-            data (torch.Tensor): Tensor de entrada en formato [batch, canales, alto, ancho]
-            threshold (float): Umbral para activación de picos (absoluto, mismo rango que los datos)
-            window (int): Tamaño de la ventana temporal histórica (en muestras/píxeles)
-
+        Args:
+            data (torch.Tensor): [Batch, Channel, Height, Width]
         Returns:
-            torch.Tensor: Tensor codificado con valores {0, +1}. Mismo formato que la entrada.
-
-        Algoritmo:
-            1. Transformación a 1D:
-                - Aplana las imágenes a vectores 1D (preserva batch y canales)
-            2. Sumas acumuladas vectorizadas:
-                - Calcula ventanas deslizantes mediante diferencias de sumas acumuladas
-                - Padding inicial para manejar bordes
-            3. Cálculo de medias:
-                - Divide las sumas por el tamaño de ventana efectivo
-                - Manejo especial para los primeros window+1 elementos (ventana inicial)
-            4. Umbralización:
-                - +1 si valor > media + threshold
-                - 0 en otro caso
+            torch.Tensor: [Num_Steps, Batch, Channel, Height, Width]
         """
         batch_size, channels, height, width = data.shape
-        data_flat = data.view(batch_size, -1)  # (batch_size, 784)
-        seq_len = data_flat.size(1) # 784
         device = data.device
         
-        # 1. Cálculo de sumas acumuladas con padding
-        padded_cumsum = torch.cat([
-            torch.zeros((batch_size, 1), device=device),
-            torch.cumsum(data_flat, dim=1)
-        ], dim=1)  # (batch_size, seq_len + 1)
+        kernel = torch.ones((channels, 1, 1, self.window), device=device) / self.window
         
-        # 2. Índices y cálculos vectorizados
-        t_indices = torch.arange(seq_len, device=device)  # (seq_len,)
-        start_indices = t_indices - self.window - 1
-        valid_start = torch.clamp(start_indices, min=0)  # (seq_len,)
+        # 1. Padding a la izquierda (Replicate)
+        padded_data = F.pad(data, (self.window, 0, 0, 0), mode='replicate')
+
+        # 2. Convolución 2D Horizontal (Calcula medias)
+        # groups=channels procesa cada canal independientemente
+        means = F.conv2d(padded_data, kernel, groups=channels)
         
-        # 3. Obtener valores del padded_cumsum usando gather
-        sum_window_start = torch.gather(
-            padded_cumsum, 
-            1, 
-            valid_start.unsqueeze(0).expand(batch_size, -1).long()
-        )
-        
-        sum_window_end = padded_cumsum[:, 1:seq_len+1]  # (batch_size, seq_len)
-        sum_window_all = sum_window_end - sum_window_start
-        
-        # 4. Calcular sum_initial y máscaras
-        sum_initial = padded_cumsum[:, self.window + 1] - padded_cumsum[:, 0]
-        mask_initial = t_indices <= self.window
-        
-        # 5. Combinar sumas iniciales y móviles
-        sum_total = torch.where(
-            mask_initial.unsqueeze(0),
-            sum_initial.unsqueeze(1).expand(-1, seq_len),
-            sum_window_all
-        )
-        
-        # 6. Calcular medias y aplicar umbral
-        mean = sum_total / (self.window + 1)
-        upper = data_flat > (mean + self.threshold)
-        
-        # 7. Generar salida codificada
-        out = torch.zeros_like(data_flat, dtype=torch.float)
-        out[upper] = 1     
-        
-        return out.view(batch_size, channels, height, width).unsqueeze(0).repeat(self.num_steps, 1, 1, 1, 1)
-    
+        # 3. Ajuste de tamaño (Recortar sobrante por padding)
+        means = means[:, :, :, :-1]
+
+        # 4. Comparación
+        diff = data - means
+        spikes = torch.zeros_like(data)
+        spikes[diff > self.threshold] = 1.0
+        if self.off_spike:
+            spikes[diff < -self.threshold] = -1.0
+
+        return spikes.unsqueeze(0).repeat(self.num_steps, 1, 1, 1, 1)
     
 
 class SFEncoder(Encoder):
     
     # Spiking Neural Networks: Background, Recent Development and the NeuCube Architecture. https://github.com/KEDRI-AUT/snn-encoder-tools
-    def __init__(self, num_steps = 25, threshold=0.1):
+    def __init__(self, num_steps = 25, threshold=0.1, off_spike=False):
         super().__init__(num_steps)
         self.threshold = threshold
-    
+        self.off_spike = off_spike
+
     def encode(self, data):
-        """
-        Algoritmo de codificación Step-Forward (SF) para Redes Neuronales de Picos (SNNs).
-    
-        Transforma intensidades de píxeles en trenes temporales de picos (+1/0) mediante 
-        umbralización adaptativa. Compara cada píxel con una línea base dinámica, generando
-        picos cuando se supera el umbral definido, en un esquema similar a modulación delta.
-
-        Parameters:
-            data (torch.Tensor): Batch de imágenes de entrada. Formato: [batch, canales, alto, ancho]
-            
-        Returns:
-            torch.Tensor: Tensor de picos codificados. Formato: [num_steps, batch, canales, alto, ancho]
-            
-        Algoritmo:
-            1. Inicialización: 
-            - Establece línea base inicial (base) con el primer valor de píxel
-            2. Comparación por Umbral:
-            - Para cada píxel subsiguiente:
-                * Pico = +1 si píxel > base + umbral (escalón positivo)
-                * Sin pico (0) si está en [base ± umbral]
-            3. Actualización de Base:
-            - Ajusta la base ±umbral tras cada pico
-        """
+        # data: [Batch, Channel, Height, Width]
         batch_size, channels, height, width = data.shape
-        images = data.view(batch_size, -1)  # [batch, 784]
-
-        # Pre-asigna tensores en GPU si está disponible
-        device = images.device
-        threshold = torch.tensor(self.threshold, device=device)
+        device = data.device
+        threshold_tensor = torch.tensor(self.threshold, device=device)
         
-        outputs = torch.zeros_like(images)
-        bases = torch.zeros_like(images)
-        bases[:, 0] = images[:, 0]
-
-        # Vectorización del algoritmo SF para todo el batch
-        for t in range(1, images.size(1)):
-            current = images[:, t]
-            prev_base = bases[:, t-1]
-            
-            # Cálculo vectorizado de condiciones
-            up = (current > prev_base + threshold)
-            down = (current < prev_base - threshold)
-            
-            # Actualización vectorizada
-            outputs[:, t] = torch.where(up, 1.0, 0.0)
-            delta_base = torch.where(up,  threshold, torch.where(down, -threshold, 0.0))
-            bases[:, t] = prev_base + delta_base #Actualiza la base      
-
-        # Preparar salida para SNN (formato temporal)
-        encoded = outputs.view(batch_size, channels, height, width)
-        encoded = encoded.unsqueeze(0).expand(self.num_steps, -1, -1, -1, -1)
+        outputs = torch.zeros_like(data)
+        bases = torch.zeros_like(data)
         
-        return encoded
+        # Inicializar base con la primera columna (borde izquierdo)
+        bases[:, :, :, 0] = data[:, :, :, 0]
+        
+        # Bucle sobre el ancho (Width) - Escáner Horizontal
+        for w in range(1, width):
+            current = data[:, :, :, w]
+            prev_base = bases[:, :, :, w-1]
+            
+            # 1. Comprobar condiciones
+            up = (current > prev_base + threshold_tensor)
+            down = (current < prev_base - threshold_tensor)
+            
+            # 2. Generar Salida (Spikes)
+            if self.off_spike:
+                # Permite 1.0 y -1.0
+                outputs[:, :, :, w] = torch.where(up, 1.0, torch.where(down, -1.0, 0.0))
+            else:
+                # Solo permite 1.0 (Ignora bajadas en la salida)
+                outputs[:, :, :, w] = torch.where(up, 1.0, 0.0)
+            
+            # 3. Actualizar Base (Step)
+            # NOTA: La base SIEMPRE se actualiza, incluso si off_spike=False.
+            # Si no bajamos la base cuando la señal cae, no podremos detectar la próxima subida.
+            delta_base = torch.where(up, threshold_tensor, torch.where(down, -threshold_tensor, 0.0))
+            bases[:, :, :, w] = prev_base + delta_base
+
+        # Expandir temporalmente
+        return outputs.unsqueeze(0).expand(self.num_steps, -1, -1, -1, -1)
