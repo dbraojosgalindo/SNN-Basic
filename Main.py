@@ -10,39 +10,44 @@ from Decoding import AllDecoders
 
 # Lista de valores de num_steps a probar en los experimentos
 num_steps = [200, 100, 50, 25, 10, 5]
-# Lista de decoders a utilizar ('all' ejecuta todos los decoders, o puedes poner un decoder concreto)
-decoders = ['all'] # posibles: rate, latency, first_spike, population,rank_order. all para todos los decoders
 
 # Configuración base para los experimentos
 config_base = {
-    'dataset': 'MNIST',
-    'encoder': 'ttfs',  # posibles: poisson, rate, ttfs, direct, delta, MW, SF, Deterministic
-    'decoder': '',
+    'dataset'     : 'MNIST',
+    'encoder'     : 'ttfs',  # posibles: rate, poisson, ttfs, direct, delta, MW, SF, Deterministic
+    'decoder'     : 'all', # posibles: rate, latency, first_spike, population,rank_order, all para todos los decoders
     'architecture': 'TwoLayerSNN',
-    'data_path': './data/mnist',
-    'batch_size': 128,
-    'num_inputs': 784,
-    'num_hidden': 1000,
-    'num_outputs': 10,
-    'num_steps': 25,
-    'beta': 0.95,
-    'lr': 5e-4,
-    'betas': (0.9, 0.999),
-    'num_epochs': 32,
-    'eval_freq': 32,
+    'data_path'   : './data/mnist',
+    'batch_size'  : 128,
+    'num_inputs'  : 784,
+    'num_hidden'  : 1000,
+    'num_outputs' : 10,
+    'num_steps'   : 25,
+    'beta'        : 0.95,
+    'lr'          : 5e-4,
+    'betas'       : (0.9, 0.999),
+    'num_epochs'  : 32,
+    'eval_freq'   : 32,
+    'encoder_params': {
+        'rate'    : {'gain': 0.5},
+        'poisson' : {'rescale_fac': 2.0},
+        'ttfs'    : {'normalize': True, 'linear': True},
+        'delta'   : {'threshold': 0.1},
+        'MW'      : {'threshold': 0.1, 'window': 5},
+        'SF'      : {'threshold': 0.1},
+    },
     'decoder_params': {
-        'rate': {'scale': 1.0},
-        'latency': {'target_time': 0.5, 'sensitivity': 1.0},
-        'first_spike': {'threshold': 0.1},
-        'population': {'num_classes': 10, 'num_neurons_per_class': 1},
-        'rank_order': {'num_classes': 10}
+        'rate'        : {'scale': 1.0},
+        'latency'     : {'target_time': 0.5, 'sensitivity': 1.0},
+        'first_spike' : {'threshold': 0.1},
+        'population'  : {'num_classes': 10, 'num_neurons_per_class': 1},
+        'rank_order'  : {'num_classes': 10}
     }
 }
 
 # Función que ejecuta un experimento individual con los parámetros dados
-def run_experiment(decoder, num_step, trial, base_config):
+def run_experiment(num_step, trial, base_config):
     config = copy.deepcopy(base_config)  # Copia la configuración base para evitar efectos colaterales
-    config['decoder'] = decoder
     config['num_steps'] = num_step
     
     experiment = SNNExperiment(config)
@@ -51,9 +56,10 @@ def run_experiment(decoder, num_step, trial, base_config):
     output = {}
     # Si accuracy no es un diccionario es que es un valor único, se usó un decoder concreto
     if not isinstance(accuracy, dict):
+        print(f"num_steps={num_step}, trial={trial} → Final accuracy: {accuracy:.2f}%")
         return {
             'encoder': config['encoder'],
-            'decoder': decoder,
+            'decoder': config['decoder'],
             'num_steps': num_step,
             'accuracy': f"{accuracy:.2f}",
             'numero de prueba': trial
@@ -80,11 +86,10 @@ if __name__ == "__main__":
 
     # Ejecuta los experimentos en paralelo usando hasta max_workers procesos
     with ProcessPoolExecutor(max_workers=10) as executor:
-        for decoder in decoders:
-            for num_step in num_steps:
-                for trial in range(1, 6):  # N repeticiones por configuración
-                    future = executor.submit(run_experiment, decoder, num_step, trial, config_base)
-                    all_futures.append(future)
+        for num_step in num_steps:
+            for trial in range(1, 6):  # N repeticiones por configuración
+                future = executor.submit(run_experiment, num_step, trial, config_base)
+                all_futures.append(future)
 
         # Guarda los resultados a medida que terminan los experimentos
         results = [future.result() for future in as_completed(all_futures)]

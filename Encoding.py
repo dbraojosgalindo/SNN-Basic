@@ -94,7 +94,7 @@ class PoissonGen(Encoder):  #Rate vs Direct paper. No utiliza una distribucion d
    
 
 
-class DeterministicRateEncoder(Encoder):
+class DeterministicRate(Encoder):
     def __init__(self, num_steps):
         super().__init__(num_steps)
         self.v_mem = None  # Memoria acumulada

@@ -38,22 +38,24 @@ class SNNExperiment:
            return MNISTDataset(self.config['data_path'], self.config['batch_size'])
 
    def init_encoder(self):
+       encoder_type = self.config['encoder']
+       params = self.config['encoder_params'].get(encoder_type, {})
        if self.config['encoder'] == "rate":
-           return RateEncoder(self.config['num_steps'])
+           return RateEncoder(self.config['num_steps'], **params)
        elif self.config['encoder'] == "poisson":
-           return PoissonGen(self.config['num_steps'])
+           return PoissonGen(self.config['num_steps'], **params)
        elif self.config['encoder'] == "ttfs":
-           return TtfsEncoder(self.config['num_steps'])
+           return TtfsEncoder(self.config['num_steps'], **params)
        elif self.config['encoder'] == "direct":
            return DirectEncoder(self.config['num_steps'])
        elif self.config['encoder'] == "delta":
-           return DeltaEncoder(self.config['num_steps'])
+           return DeltaEncoder(self.config['num_steps'], **params)
        elif self.config['encoder'] == "MW":
-           return MWEncoder(self.config['num_steps'])
+           return MWEncoder(self.config['num_steps'], **params)
        elif self.config['encoder'] == "SF":
-           return SFEncoder(self.config['num_steps'])
+           return SFEncoder(self.config['num_steps'], **params)
        elif self.config['encoder'] == "Deterministic":
-           return DeterministicRateEncoder(self.config['num_steps'])
+           return DeterministicRate(self.config['num_steps'])
        else:
            raise ValueError(f"Coder no soportado")
 
